@@ -110,6 +110,10 @@ def test_expired_sticky_raises_on_get(
         get()
     assert excinfo.value.target == "todo"
     assert excinfo.value.set_on == date(2026, 7, 14)
+    # Vault-only callers may skip the freshness check.
+    st = get(check_sticky=False)
+    assert st.sticky_target == "todo"
+    assert st.active_vault is None or st.active_vault is not None
 
 
 def test_expired_sticky_raises_on_swap(

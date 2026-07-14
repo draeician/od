@@ -190,15 +190,19 @@ def _write_raw(data: dict[str, Any]) -> None:
         raise StateError(f"cannot write state file {path}: {exc}") from exc
 
 
-def get() -> State:
+def get(*, check_sticky: bool = True) -> State:
     """Return current state.
 
-    Missing state file yields an empty State. If a sticky target is set
-    and ``sticky_set_on`` is not today, raise ``StickyExpired``.
-    Active vault does not expire.
+    Missing state file yields an empty State. When *check_sticky* is True
+    (default) and a sticky target is set with ``sticky_set_on`` not today,
+    raise ``StickyExpired``. Active vault does not expire.
+
+    Pass ``check_sticky=False`` for vault-only operations (glance, list,
+    etc.) that must not fail solely because yesterday's sticky expired.
     """
     state = _to_state(_read_raw())
-    _check_sticky_fresh(state)
+    if check_sticky:
+        _check_sticky_fresh(state)
     return state
 
 
