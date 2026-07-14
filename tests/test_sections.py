@@ -72,7 +72,8 @@ def test_add_section_appends_empty_h1() -> None:
     note = parse("# a\nx\n")
     out = add_section(note, "b")
     assert out.sections[-1] == Section(heading="b", lines=())
-    assert render(out) == "# a\nx\n# b\n"
+    # Blank line separates consecutive H1s.
+    assert render(out) == "# a\nx\n\n# b\n"
 
 
 def test_add_section_duplicate_raises() -> None:
@@ -119,7 +120,27 @@ def test_append_code_fenced_block() -> None:
 def test_append_unknown_heading_creates_section() -> None:
     note = parse("# a\nx\n")
     out = append_to_section(note, "new", "item", style="plain")
-    assert render(out) == "# a\nx\n# new\n- item\n"
+    assert render(out) == "# a\nx\n\n# new\n- item\n"
+
+
+def test_blank_line_between_headers_on_switch() -> None:
+    """p → c → p keeps one # p and blanks between H1 sections."""
+    note = parse("")
+    note = append_to_section(note, "p", "first", style="plain")
+    note = append_to_section(note, "c", "df -h", style="code")
+    note = append_to_section(note, "p", "second", style="plain")
+    text = render(note)
+    assert text == (
+        "# p\n"
+        "- first\n"
+        "- second\n"
+        "\n"
+        "# c\n"
+        "```\n"
+        "df -h\n"
+        "```\n"
+    )
+    assert sum(1 for s in note.sections if s.heading == "p") == 1
 
 
 def test_append_unknown_style_raises() -> None:

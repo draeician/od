@@ -197,15 +197,47 @@ def _format_entry(line: str, style: Style) -> tuple[str, ...]:
     raise UnknownStyleError(f"unknown style: {style!r}")
 
 
+def _rstrip_blank_lines(lines: tuple[str, ...] | list[str]) -> list[str]:
+    """Return *lines* without trailing empty strings."""
+    out = list(lines)
+    while out and out[-1] == "":
+        out.pop()
+    return out
+
+
+def _ensure_section_separators(note: Note) -> Note:
+    """Ensure exactly one blank line before each H1 after the first.
+
+    The blank is stored as a trailing empty body line on the preceding
+    section so ``render`` emits a visual gap between headers. Pure parse
+    of existing notes is unchanged; only write transforms apply this.
+    """
+    sections = list(note.sections)
+    if len(sections) < 2:
+        return note
+    fixed: list[Section] = []
+    for i, sec in enumerate(sections):
+        nxt = sections[i + 1] if i + 1 < len(sections) else None
+        lines = list(sec.lines)
+        if nxt is not None and nxt.heading is not None:
+            lines = _rstrip_blank_lines(lines)
+            lines.append("")
+            fixed.append(Section(heading=sec.heading, lines=tuple(lines)))
+        else:
+            fixed.append(sec)
+    return Note(sections=tuple(fixed), ends_with_newline=note.ends_with_newline)
+
+
 def add_section(note: Note, heading: str) -> Note:
     """Append a new empty H1 section. Raises if the heading already exists."""
     if any(s.heading == heading for s in note.sections):
         raise DuplicateHeadingError(f"heading already exists: {heading!r}")
     new_section = Section(heading=heading, lines=())
-    return Note(
+    out = Note(
         sections=note.sections + (new_section,),
         ends_with_newline=True,
     )
+    return _ensure_section_separators(out)
 
 
 def append_to_section(
@@ -219,6 +251,8 @@ def append_to_section(
     Unknown headings create a new H1 section at the end of the note.
     *style* is one of auto|todo|log|plain|code. ``auto`` inspects the
     section body (todo / log / plain per CLAUDE.md conventions).
+
+    Write paths leave a blank line between consecutive H1 sections.
     """
     if style not in ("auto", "todo", "log", "plain", "code"):
         raise UnknownStyleError(f"unknown style: {style!r}")
@@ -239,11 +273,15 @@ def append_to_section(
         resolved = style  # type: ignore[assignment]
 
     entry = _format_entry(line, resolved)
-    new_lines = section.lines + entry
+    # Insert above any trailing blank used as the next-section separator.
+    body = _rstrip_blank_lines(section.lines)
+    new_lines = tuple(body) + entry
     new_section = Section(heading=section.heading, lines=new_lines)
     sections = list(note.sections)
     sections[idx] = new_section
-    return Note(sections=tuple(sections), ends_with_newline=True)
+    return _ensure_section_separators(
+        Note(sections=tuple(sections), ends_with_newline=True)
+    )
 
 
 def open_tasks(note: Note) -> list[Task]:
