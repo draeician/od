@@ -41,4 +41,4 @@ obsidian, sections.
 - **Live:** read-only `glance("riddell")` after `socket.ensure` OK; no live writes
   (daily notes empty / real vault left untouched).
 - **No version bump** (hold until release).
-- Wave 3 remaining: `resolve.py`.
+- Wave 3 complete with `resolve` (see review/resolve.md).
