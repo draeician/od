@@ -19,3 +19,5 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# src layout: make `import od` work without exporting PYTHONPATH=src
+pythonpath = ["src"]
