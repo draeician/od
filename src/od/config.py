@@ -36,6 +36,11 @@ __all__ = [
     "load",
     "effective_with_sources",
     "emit_toml",
+    "global_config_path",
+    "ensure_global_config_dir",
+    "write_global_config_template",
+    "write_global_vault_root",
+    "GLOBAL_CONFIG_TEMPLATE",
 ]
 
 # ---------------------------------------------------------------------------
@@ -119,12 +124,115 @@ _LAST_CONFIG: Config | None = None
 _LAST_SOURCES: list[tuple[str, Any, str]] | None = None
 
 
-def _global_config_path() -> Path:
+def global_config_path() -> Path:
+    """Return ``~/.config/od/config.toml`` (tier-1 global config path)."""
     return Path.home() / ".config" / "od" / "config.toml"
+
+
+def _global_config_path() -> Path:
+    """Internal alias kept for existing call sites."""
+    return global_config_path()
 
 
 def _vault_root_config_path(vault_root: Path) -> Path:
     return vault_root / "od.toml"
+
+
+# Template written when the user has no global config yet. Comments only —
+# vault_root must be set by the user (or interactive bootstrap in cli).
+GLOBAL_CONFIG_TEMPLATE = """\
+# od global config (tier 1) — machine-local bootstrap
+# https://github.com/draeician/od
+#
+# Set vault_root to the directory that *contains* your Obsidian vaults
+# (the parent of each vault folder). Paths may use ~ for home.
+#
+# Example:
+#   vault_root = "~/Documents/vaults"
+#
+# Then open a vault in Obsidian, and either:
+#   od v <vault-name>     # sticky active vault
+#   od -v <vault-name>    # one-shot override
+#
+# Optional collection defaults live in <vault_root>/od.toml (tier 2), e.g.:
+#   [vaults]
+#   default = "my-vault"
+#   [aliases]
+#   t = "truscan modifications"
+#   m = "michael brumit"
+#   p = "personal updates"
+#   c = "daily checks"
+#
+# vault_root = "~/path/to/vaults"
+"""
+
+
+def ensure_global_config_dir() -> Path:
+    """Create ``~/.config/od`` if missing. Returns the directory path.
+
+    Raises:
+        ConfigError: If the directory cannot be created.
+    """
+    path = global_config_path().parent
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ConfigError(f"cannot create config directory {path}: {exc}") from exc
+    return path
+
+
+def write_global_config_template(*, overwrite: bool = False) -> tuple[Path, bool]:
+    """Ensure global config dir exists and write a template config.toml if needed.
+
+    Args:
+        overwrite: When True, replace an existing config.toml with the template.
+
+    Returns:
+        ``(path, written)`` where *written* is True only if this call created
+        or replaced the file.
+
+    Raises:
+        ConfigError: On I/O failure.
+    """
+    ensure_global_config_dir()
+    path = global_config_path()
+    if path.is_file() and not overwrite:
+        return path, False
+    try:
+        path.write_text(GLOBAL_CONFIG_TEMPLATE, encoding="utf-8")
+    except OSError as exc:
+        raise ConfigError(f"cannot write config template {path}: {exc}") from exc
+    return path, True
+
+
+def write_global_vault_root(vault_root: str) -> Path:
+    """Write (or replace) global config.toml with *vault_root* set.
+
+    Preserves a short header comment. Does not create Obsidian vaults.
+
+    Args:
+        vault_root: Absolute or ``~``-prefixed path to the vault collection.
+
+    Returns:
+        Path to the written config.toml.
+
+    Raises:
+        ConfigError: If *vault_root* is empty or write fails.
+    """
+    if not vault_root or not str(vault_root).strip():
+        raise ConfigError("vault_root must be non-empty")
+    root = str(vault_root).strip()
+    ensure_global_config_dir()
+    path = global_config_path()
+    body = (
+        "# od global config (tier 1) — machine-local bootstrap\n"
+        f"vault_root = {_toml_string(root)}\n"
+    )
+    try:
+        path.write_text(body, encoding="utf-8")
+    except OSError as exc:
+        raise ConfigError(f"cannot write config {path}: {exc}") from exc
+    return path
 
 
 def _vault_config_path(vault_dir: Path) -> Path:

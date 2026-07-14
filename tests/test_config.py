@@ -214,3 +214,37 @@ def test_absolute_vault_path_skips_name_lookup(
     )
     cfg = load(str(vault), {})
     assert cfg.aliases["p"] == "personal updates"
+
+
+def test_write_global_config_template_creates_dir_and_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    path, written = config_mod.write_global_config_template()
+    assert written is True
+    assert path == home / ".config" / "od" / "config.toml"
+    assert path.is_file()
+    text = path.read_text(encoding="utf-8")
+    assert "vault_root" in text
+    assert path.parent.is_dir()
+
+    # Second call is a no-op
+    path2, written2 = config_mod.write_global_config_template()
+    assert written2 is False
+    assert path2 == path
+
+
+def test_write_global_vault_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    root = tmp_path / "vaults"
+    root.mkdir()
+    path = config_mod.write_global_vault_root(str(root))
+    assert path.is_file()
+    cfg = load(None, {})
+    assert cfg.vault_root == str(root)

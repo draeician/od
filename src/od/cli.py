@@ -163,6 +163,117 @@ def _is_interactive() -> bool:
     return bool(sys.stdin.isatty() and sys.stdout.isatty())
 
 
+def _looks_like_filesystem_path(value: str) -> bool:
+    """True if *value* is meant as a path (absolute, ~, or multi-part)."""
+    p = Path(value).expanduser()
+    if value.startswith("~") or p.is_absolute():
+        return True
+    return len(p.parts) > 1
+
+
+def _propose_vault_root_from_path(path: Path) -> tuple[str, str | None]:
+    """Infer (vault_root, vault_name|None) from an existing directory path.
+
+    A directory containing ``.obsidian`` is treated as a single vault (root =
+    parent). Otherwise the path is treated as the vault collection root.
+    """
+    path = path.expanduser().resolve()
+    if (path / ".obsidian").is_dir():
+        return str(path.parent), path.name
+    return str(path), None
+
+
+def _prompt_yn(prompt: str, *, stdin: TextIO, stderr: TextIO) -> bool | None:
+    """Ask y/n on stderr. Returns True/False, or None on EOF/empty."""
+    print(prompt, end="", file=stderr, flush=True)
+    line = stdin.readline()
+    if not line:
+        return None
+    answer = line.strip().casefold()
+    if answer in ("y", "yes"):
+        return True
+    if answer in ("n", "no"):
+        return False
+    return None
+
+
+def _bootstrap_missing_vault_root(
+    *,
+    vault_override: str | None,
+    stdin: TextIO,
+    stderr: TextIO,
+) -> tuple[Config, str | None]:
+    """Create config paths/template; optionally set vault_root interactively.
+
+    Returns:
+        ``(config, vault_override)`` after bootstrap. *vault_override* may be
+        rewritten when the user pointed ``-v`` at a vault collection path
+        (that path becomes vault_root, not a vault name).
+    """
+    path, written = config.write_global_config_template()
+    if written:
+        _err(f"created config template: {path}", stderr)
+    else:
+        _err(f"vault_root is not set (config: {path})", stderr)
+
+    # Prompt on stderr; only require stdin to be a TTY (stdout may be piped).
+    interactive = bool(stdin.isatty())
+    proposed_root: str | None = None
+    proposed_vault: str | None = None
+    override_out = vault_override
+
+    if vault_override and _looks_like_filesystem_path(vault_override):
+        candidate = Path(vault_override).expanduser()
+        if candidate.is_dir():
+            proposed_root, proposed_vault = _propose_vault_root_from_path(
+                candidate
+            )
+        else:
+            _err(
+                f"path not found: {candidate}\n"
+                f"edit {path} and set vault_root, then re-run",
+                stderr,
+            )
+            return config.load(None, {}), override_out
+
+    if proposed_root and interactive:
+        msg = (
+            f"Set vault_root to {proposed_root!r} in {path}? [y/n] "
+        )
+        answer = _prompt_yn(msg, stdin=stdin, stderr=stderr)
+        if answer is True:
+            config.write_global_vault_root(proposed_root)
+            _err(f"wrote vault_root = {proposed_root!r}", stderr)
+            # -v pointed at collection root → not a vault name.
+            if proposed_vault is None and vault_override:
+                override_out = None
+            elif proposed_vault is not None:
+                override_out = proposed_vault
+            return config.load(override_out, {}), override_out
+        if answer is False:
+            _err(
+                f"ok; edit {path} and set vault_root, then re-run",
+                stderr,
+            )
+            return config.load(None, {}), override_out
+        _err("expected y or n", stderr)
+        return config.load(None, {}), override_out
+
+    if interactive and not proposed_root:
+        _err(
+            f"edit {path} and set vault_root to your vaults directory, "
+            "then re-run (example: vault_root = \"~/Documents/vaults\")",
+            stderr,
+        )
+    elif not interactive:
+        _err(
+            f"set vault_root in {path} (non-interactive; no prompt)",
+            stderr,
+        )
+
+    return config.load(None, {}), override_out
+
+
 def _pick_vault_interactive(
     names: list[str],
     *,
@@ -436,8 +547,18 @@ def run(
 
     try:
         flag_overrides: dict = {}
-        # -v is tier-4 vault selection only; not written into config file.
+        # -v is tier-4 vault selection only; not written into config file
+        # (except interactive bootstrap when vault_root is missing).
         cfg = config.load(vault_override, flag_overrides)
+
+        if not cfg.vault_root:
+            cfg, vault_override = _bootstrap_missing_vault_root(
+                vault_override=vault_override,
+                stdin=stdin,
+                stderr=stderr,
+            )
+            if not cfg.vault_root:
+                return 1
 
         # State: vault-only load first; sticky freshness enforced when needed.
         try:
