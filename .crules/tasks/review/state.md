@@ -39,4 +39,4 @@ config (for `vault_root`), stdlib.
   `config.emit_toml`.
 - **Verify:** `pytest tests/test_state.py -v` → 12 passed.
 - **No version bump** (hold until release).
-- Wave 2 remaining: `obsidian`, `entities`.
+- Wave 2 remaining: `entities` (`obsidian` in review).
