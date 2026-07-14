@@ -89,6 +89,22 @@ def test_version_flag(conf_home: Path) -> None:
     assert __version__ in combined
 
 
+def test_help_documents_command_surface(conf_home: Path) -> None:
+    """--help epilog stays aligned with the usage contract."""
+    code, out, err = _run(["--help"])
+    combined = out + err
+    assert code == 0
+    assert "od --config" in combined
+    assert "flag-only" in combined or "flag only" in combined
+    assert "exact alias beats" in combined
+    assert "cmd | od" in combined or "pipe" in combined.lower()
+    assert "vaults" in combined
+    assert "sticky" in combined.lower()
+    assert "todo" in combined
+    # config is not advertised as a positional verb path
+    assert "use --config" in combined or "--config" in combined
+
+
 def test_show_config_flag(conf_home: Path, fixed_today: date) -> None:
     code, out, err = _run(["--config"])
     assert code == 0

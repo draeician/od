@@ -5,13 +5,15 @@ Purpose:
     messaging, exit codes. No business logic.
 
 Public:
-    main()
+    main(), run()
 
 Invariants:
     The only module that prints or exits; stdout = useful output only
-    (`od ... | cb` clean), everything else stderr; completers pull from
-    config (aliases, reserved words), state, vault list, entity slugs;
-    TTY-only prompting.
+    (`od ... | cb` clean), everything else stderr; --help epilog is the
+    user-facing command surface (keep aligned with the usage spec);
+    --config is flag-only; unrouted piped stdin fails loud; completers
+    pull from config (aliases, positional reserved words), state, vault
+    list; TTY-only prompting.
 
 Depends on:
     everything above.
@@ -80,10 +82,56 @@ def _list_vault_names(cfg: Config) -> list[str]:
     return names
 
 
+_HELP_EPILOG = """\
+commands:
+  od                         today at a glance (headings + open tasks)
+  od --config                print effective merged config (tiers)
+  od vaults | od v           list vaults (* = active)
+  od v NAME                  set active vault (persists in state)
+  od = TARGET                set sticky heading (alias or name; expanded)
+  od =                       show sticky + vault
+  od = - | od = off          swap sticky / clear sticky
+  od "text"                  append to sticky target (error if unset)
+  od ALIAS|HEADING "text"    append under heading (style: auto)
+  cmd | od ALIAS|HEADING     pipe → fenced code block under heading
+  od todo                    list open tasks
+  od done N                  mark open task N complete
+  od new "heading"           create empty H1 section
+  od who NAME|ALIAS          show entity card
+
+resolution:
+  exact alias beats reserved-word prefix (e.g. alias c ≠ config)
+  reserved verbs (positional): vaults, todo, done, new, who
+  config is flag-only: use --config (not a positional verb)
+  unambiguous reserved prefixes: v→vaults, to→todo, d→done, …
+  unknown heading → new H1 at end of today's note
+  re-targeting an existing H1 appends under it (no duplicate header)
+  writes leave a blank line between consecutive H1 sections
+
+pipes:
+  stdin must be routed: cmd | od <alias|heading>
+  unrouted piped stdin → stderr error, non-zero exit (never discarded)
+
+sticky:
+  sticky-routed writes echo destination on stderr: → vault/heading
+  sticky expires end of day; active vault does not
+
+config tiers (later wins): ~/.config/od/config.toml →
+  <vault_root>/od.toml → <vault>/.od.toml → flags (-v, --config)
+
+full UX contract: docs/2026-07-14-od-usage-spec.md
+"""
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="od",
-        description="Fast, low-typing CLI for Obsidian daily notes",
+        description=(
+            "Fast, low-typing CLI for Obsidian daily notes. "
+            "Requires the Obsidian app running with CLI enabled."
+        ),
+        epilog=_HELP_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--version",
@@ -102,12 +150,19 @@ def _build_parser() -> argparse.ArgumentParser:
         "--config",
         dest="show_config",
         action="store_true",
-        help="print effective merged config with source tiers",
+        help=(
+            "print effective merged config with source tiers "
+            "(flag only; not a positional verb)"
+        ),
     )
     parser.add_argument(
         "words",
         nargs="*",
-        help="command words (reserved verbs, aliases, sticky '=', text)",
+        metavar="words",
+        help=(
+            "command words: reserved verbs (vaults|todo|done|new|who), "
+            "heading aliases, sticky '=', or free text/heading"
+        ),
     )
     return parser
 

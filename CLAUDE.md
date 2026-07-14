@@ -39,10 +39,11 @@ All work here follows `../team-conventions/2026-07-14-multi-agent-team-charter.m
 ## Daily Note Conventions (must be preserved by all writes)
 
 - One H1 (`#`) heading per context section.
+- Blank line between consecutive H1 sections (enforced on od writes).
 - Todo items: `- [ ] text` under project headings.
 - Log lines: `- YYYY-MM-DD HH:MM :message` (timestamp auto-generated).
 - Terminal output: fenced code blocks under the relevant heading.
-- Unknown target heading → create new H1 section at end of file.
+- Unknown target heading → create new H1 section at end of file; existing heading → append under it (no duplicate H1).
 
 ## Editorial Rules
 

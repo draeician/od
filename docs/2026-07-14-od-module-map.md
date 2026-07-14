@@ -1,6 +1,6 @@
 # od — Module Map (Compartmentalization Plan)
 
-_Status: BRAINSTORMING draft, 2026-07-14. Derives from `2026-07-14-od-usage-spec.md`. Per the team charter: one module = one responsibility = one owner-task; interfaces are contracts; two tasks must never require editing the same file._
+_Status: IMPLEMENTED (as of 0.2.2+). Derives from `2026-07-14-od-usage-spec.md`. Per the team charter: one module = one responsibility = one owner-task; interfaces are contracts; two tasks must never require editing the same file._
 
 ## Layout
 
@@ -66,7 +66,7 @@ Lower modules never import upper ones. `cli.py` is the only module allowed to pr
 ### sections.py — daily-note markdown (pure functions, no I/O)
 - **Purpose:** parse and modify note text: H1 sections, todo items, timestamped log lines, fenced code blocks. The daily-note conventions live here and only here.
 - **Public:** `parse(text) -> Note`; `append_to_section(note, heading, line, style) -> Note`; `add_section(note, heading) -> Note`; `open_tasks(note) -> list[Task]`; `mark_done(note, n) -> Note`; `render(note) -> str`.
-- **Invariants:** pure — no file/network/subprocess I/O, fully unit-testable; `render(parse(x)) == x` for untouched sections (round-trip fidelity); style auto-detection (todo/log/plain) follows the conventions table in CLAUDE.md.
+- **Invariants:** pure — no file/network/subprocess I/O, fully unit-testable; `render(parse(x)) == x` for untouched notes (round-trip fidelity); style auto-detection (todo/log/plain) follows the conventions table in CLAUDE.md; write transforms (`append_to_section` / `add_section`) leave a blank line between consecutive H1 sections; re-append to an existing heading mutates that section (no duplicate H1).
 - **Depends on:** stdlib only. **The most parallel-safe module — hand to any agent in isolation.**
 
 ### vault.py — safe read-modify-write orchestration
@@ -83,14 +83,14 @@ Lower modules never import upper ones. `cli.py` is the only module allowed to pr
 
 ### resolve.py — command-line word resolution
 - **Purpose:** classify argv words: reserved word (with git-style unambiguous-prefix matching), heading alias, `=` grammar, bare text.
-- **Public:** `resolve(words, config, state) -> Command` (a typed intent: Glance, SetVault, SetSticky, Append, Todo, Done, New, Who, …); `AmbiguousPrefix` error carries the candidate list.
-- **Invariants:** argument-count rule (one positional = text for sticky, two = target + text); explicit alias always beats sticky; no sticky and bare text → `NoTargetError`; pure, no I/O.
+- **Public:** `resolve(words, config, state) -> Command` (a typed intent: Glance, SetVault, SetSticky, Append, Todo, Done, New, Who, …); `AmbiguousPrefix` error carries the candidate list; `match_reserved`; `expand_target`.
+- **Invariants:** argument-count rule (one positional = text for sticky, two = target + text); resolution order exact positional reserved → exact alias → reserved prefix → free target; exact alias beats reserved prefix; `config` is flag-only (not positional); sticky set expands aliases; explicit alias always beats sticky; no sticky and bare text → `NoTargetError`; pure, no I/O.
 - **Depends on:** config, state (types only), stdlib.
 
 ### cli.py — thin shell
 - **Purpose:** argparse + argcomplete wiring, TTY prompts (vault picker), stderr messaging, exit codes. No business logic.
-- **Public:** `main()`.
-- **Invariants:** the only module that prints or exits; stdout = useful output only (`od … | cb` clean), everything else stderr; completers pull from config (aliases, reserved words), state, vault list, entity slugs; TTY-only prompting.
+- **Public:** `main()`, `run()`.
+- **Invariants:** the only module that prints or exits; stdout = useful output only (`od … | cb` clean), everything else stderr; `--help` epilog documents the full command surface; `--config` is flag-only (never injected as a positional verb); unrouted piped stdin → error exit; sticky destination echo uses resolved heading; completers pull from config (positional reserved words, aliases), state, vault list; TTY-only prompting.
 - **Depends on:** everything above.
 
 ## Task Slicing (parallel-safe build order)

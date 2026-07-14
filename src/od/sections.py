@@ -15,9 +15,10 @@ Public:
 
 Invariants:
     Pure — no file/network/subprocess I/O, fully unit-testable;
-    render(parse(x)) == x for untouched sections (round-trip fidelity);
+    render(parse(x)) == x for untouched notes (round-trip fidelity);
     style auto-detection (todo/log/plain) follows the conventions table in
-    CLAUDE.md.
+    CLAUDE.md; write transforms leave a blank line between consecutive
+    H1 sections; re-append mutates the existing section (no duplicate H1).
 
 Depends on:
     stdlib only. The most parallel-safe module — hand to any agent in

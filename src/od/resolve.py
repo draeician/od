@@ -11,8 +11,10 @@ Public:
 
 Invariants:
     Argument-count rule (one positional = text for sticky, two = target +
-    text); explicit alias always beats sticky; no sticky and bare text ->
-    NoTargetError; pure, no I/O.
+    text); resolution order: exact positional reserved -> exact alias ->
+    reserved prefix -> free target; config is flag-only (not positional);
+    exact alias always beats reserved prefix and sticky; no sticky and
+    bare text -> NoTargetError; pure, no I/O.
 
 Depends on:
     config, state (types only), stdlib.

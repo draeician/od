@@ -53,10 +53,13 @@ Team rules: `AGENTS.md`. Workstation notes: `CLAUDE.md`.
   every option declares its tier at design time.
 - **Daily note conventions** (must be preserved):
   - One H1 (`#`) per context section
+  - Blank line between consecutive H1 sections on write
   - Todos: `- [ ] text`
   - Log lines: `- YYYY-MM-DD HH:MM :message`
   - Terminal output: fenced code blocks under the relevant heading
-  - Unknown target heading → new H1 at end of file
+  - Unknown target heading → new H1 at end of file; existing heading → append in place
+- **Resolution** (see usage spec): exact alias beats reserved prefix; `config` is `--config` only; unrouted piped stdin fails loud
+- **CLI help**: `od --help` epilog is the user-facing command surface; keep it aligned with the usage spec
 
 ## Hard rules
 
@@ -74,8 +77,8 @@ Team rules: `AGENTS.md`. Workstation notes: `CLAUDE.md`.
 ## Design spirit (inherited from ol)
 
 1. **Less typing** — sane defaults, single-letter aliases, bare `od` is useful, pipes work.
-2. **Do the right thing by default** — piped input → fenced code; `done <n>` → toggle; unknown heading → new H1.
-3. **Fail loud, never silently corrupt** — self-heal socket; verify headings; abort unsafe writes; stdout clean for `| cb`.
+2. **Do the right thing by default** — piped input → fenced code; `done <n>` → toggle; unknown heading → new H1; re-use heading → append.
+3. **Fail loud, never silently corrupt** — self-heal socket; verify headings; abort unsafe writes; unrouted pipes error; stdout clean for `| cb`.
 4. **Deliberate structure** — side-effect-free imports, deep-merged config, sanitized filenames.
 
 ## Status

@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-07-14
+
+### Changed
+
+- **cli** — `od --help` epilog documents full command surface, resolution rules, pipes, sticky, and config tiers
+- **docs** — usage spec + module map marked implemented; README added; CHANGELOG backfill for 0.2.1–0.2.2
+
+## [0.2.2] - 2026-07-14
+
+### Fixed
+
+- **sections** — write transforms leave a blank line between consecutive H1 sections
+
+## [0.2.1] - 2026-07-14
+
+### Fixed
+
+- **resolve** — exact alias beats reserved-word prefix; `config` is flag-only (`--config`), not positional
+- **cli** — unrouted piped stdin errors (never silent discard); destination echo shows resolved heading
+
 ## [0.2.0] - 2026-07-14
 
 First feature release of `od`: full module stack from pure daily-note
