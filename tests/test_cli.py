@@ -42,7 +42,9 @@ def conf_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         'default = "work"\n'
         "[aliases]\n"
         't = "truscan modifications"\n'
-        'm = "michael brumit"\n',
+        'm = "michael brumit"\n'
+        'p = "personal updates"\n'
+        'c = "daily checks"\n',
         encoding="utf-8",
     )
     config_mod._LAST_CONFIG = None
@@ -201,6 +203,95 @@ def test_piped_stdin_code_append(
     assert calls[0][1] == "truscan modifications"
     assert calls[0][2] == "line1\nline2\n"
     assert calls[0][3] == "code"
+
+
+def test_piped_alias_c_is_code_not_config(
+    conf_home: Path,
+    fixed_today: date,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``echo … | od c`` must append under alias heading, not show config."""
+    state_mod.set_vault("work")
+    calls: list[Any] = []
+
+    def fake_append(vault: str, heading: str, text: str, style: str = "auto") -> str:
+        calls.append((vault, heading, text, style))
+        return "ok"
+
+    monkeypatch.setattr(cli_mod.vault, "append", fake_append)
+    monkeypatch.setattr(cli_mod.entities, "resolve_alias", lambda *a, **k: None)
+    code, out, err = _run(
+        ["c"],
+        stdin_data="df -h output\n",
+        isatty=False,
+    )
+    assert code == 0
+    assert calls == [("work", "daily checks", "df -h output\n", "code")]
+    assert "vault_root" not in out
+    assert out == ""
+
+
+def test_piped_stdin_discard_is_loud_error(
+    conf_home: Path,
+    fixed_today: date,
+) -> None:
+    """Piped stdin that cannot be routed must error; never silent discard."""
+    state_mod.set_vault("work")
+    # Reserved verb does not consume stdin
+    code, out, err = _run(
+        ["todo"],
+        stdin_data="should not be discarded silently\n",
+        isatty=False,
+    )
+    assert code != 0
+    assert "piped" in err.lower() or "destination" in err.lower()
+    assert out == ""
+
+    # Glance (no words) with pipe also errors
+    code, out, err = _run(
+        [],
+        stdin_data="orphan pipe\n",
+        isatty=False,
+    )
+    assert code != 0
+    assert "piped" in err.lower() or "destination" in err.lower()
+
+    # --config with pipe must not swallow stdin
+    code, out, err = _run(
+        ["--config"],
+        stdin_data="orphan\n",
+        isatty=False,
+    )
+    assert code != 0
+    assert "piped" in err.lower() or "destination" in err.lower()
+
+
+def test_destination_echo_shows_resolved_heading(
+    conf_home: Path,
+    fixed_today: date,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sticky-routed writes echo the heading, not the raw alias token."""
+    state_mod.set_vault("work")
+    # Store alias key in state (as if expand was skipped on set).
+    state_mod.set_sticky("p")
+    calls: list[tuple] = []
+
+    def fake_append(vault: str, heading: str, text: str, style: str = "auto") -> str:
+        calls.append((vault, heading, text, style))
+        return "ok"
+
+    monkeypatch.setattr(cli_mod.vault, "append", fake_append)
+    monkeypatch.setattr(cli_mod.entities, "resolve_alias", lambda *a, **k: None)
+    code, out, err = _run(["shipped it"])
+    assert code == 0
+    assert calls == [("work", "personal updates", "shipped it", "auto")]
+    # Exact destination line (avoid substring false-positive on ``…/p``).
+    assert "→ work/personal updates\n" in err or err.strip() == "→ work/personal updates"
+    assert not any(
+        line.strip() == "→ work/p" for line in err.splitlines()
+    )
+    assert out == ""
 
 
 def test_glance(

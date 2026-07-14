@@ -65,7 +65,6 @@ def test_match_reserved_exact_and_prefix() -> None:
     assert match_reserved("d") == "done"
     assert match_reserved("n") == "new"
     assert match_reserved("w") == "who"
-    assert match_reserved("c") == "config"
     assert match_reserved("to") == "todo"
     assert match_reserved("xyz") is None
 
@@ -90,7 +89,6 @@ def test_reserved_commands() -> None:
     cfg, st = _cfg(), _state()
     assert resolve(["todo"], cfg, st) == Todo()
     assert resolve(["to"], cfg, st) == Todo()  # prefix
-    assert resolve(["config"], cfg, st) == ShowConfig()
     assert resolve(["vaults"], cfg, st) == ListVaults()
     assert resolve(["v"], cfg, st) == ListVaults()
     assert resolve(["v", "draeician"], cfg, st) == SetVault(name="draeician")
@@ -149,6 +147,54 @@ def test_exact_alias_beats_reserved_prefix() -> None:
     )
     # Bare ``todo`` still the reserved verb
     assert resolve(["todo"], cfg, st) == Todo()
+
+
+def test_exact_alias_c_beats_config_prefix() -> None:
+    """Alias ``c`` is exact and must never expand toward ``config``."""
+    cfg = _cfg({"c": "daily checks"})
+    st = _state(sticky=None)
+    # Piped: reproduction of ``echo ... | od c``
+    cmd = resolve(["c"], cfg, st, stdin_piped=True)
+    assert cmd == Append(
+        target="daily checks",
+        text=None,
+        style="code",
+        via_sticky=False,
+    )
+    assert not isinstance(cmd, ShowConfig)
+    # Explicit text target
+    cmd2 = resolve(["c", "ok"], cfg, st)
+    assert cmd2 == Append(
+        target="daily checks",
+        text="ok",
+        style="auto",
+        via_sticky=False,
+    )
+
+
+def test_config_not_positional_reserved() -> None:
+    """``config`` is flag-only (``--config``); not a positional reserved word."""
+    cfg, st = _cfg(), _state(sticky=None)
+    assert match_reserved("config") is None
+    assert match_reserved("c") is None
+    # Positional ``config`` is a free target, not ShowConfig.
+    cmd = resolve(["config"], cfg, st, stdin_piped=True)
+    assert cmd == Append(
+        target="config",
+        text=None,
+        style="code",
+        via_sticky=False,
+    )
+    assert not isinstance(cmd, ShowConfig)
+    # With sticky, bare text still appends; ``config`` as target+text works.
+    st2 = _state(sticky="todo")
+    cmd2 = resolve(["config", "note"], cfg, st2)
+    assert cmd2 == Append(
+        target="config",
+        text="note",
+        style="auto",
+        via_sticky=False,
+    )
 
 
 def test_one_word_sticky_append() -> None:

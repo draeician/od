@@ -94,7 +94,7 @@ class Glance:
 
 @dataclass(frozen=True)
 class ShowConfig:
-    """``od config`` (flag form ``--config`` is argparse's job)."""
+    """Effective config listing — produced only by the ``--config`` flag in cli."""
 
 
 @dataclass(frozen=True)
@@ -187,6 +187,16 @@ Command = Union[
 ]
 
 
+# Flag-only tokens: listed in config.RESERVED_WORDS so aliases cannot collide
+# with them, but they are never positional verbs (use ``od --config``).
+_FLAG_ONLY_RESERVED: frozenset[str] = frozenset({"config"})
+
+
+def _positional_reserved() -> frozenset[str]:
+    """Reserved words that may appear as positional argv verbs."""
+    return frozenset(w for w in RESERVED_WORDS if w not in _FLAG_ONLY_RESERVED)
+
+
 def expand_target(word: str, config: Config) -> str:
     """Map an exact alias to its heading; otherwise return *word* unchanged."""
     aliases = config.aliases
@@ -196,18 +206,20 @@ def expand_target(word: str, config: Config) -> str:
 
 
 def match_reserved(word: str) -> str | None:
-    """Return the reserved word for *word*, or None if no reserved match.
+    """Return the positional reserved word for *word*, or None if no match.
 
     Exact match wins. Otherwise git-style unambiguous prefix. Raises
     ``AmbiguousPrefix`` when more than one reserved word shares the prefix.
 
     Does not consult aliases — callers decide alias-vs-prefix order.
+    ``config`` is flag-only (``--config``) and never matches positionally.
     """
-    if word in RESERVED_WORDS:
+    reserved_set = _positional_reserved()
+    if word in reserved_set:
         return word
     if not word:
         return None
-    candidates = sorted(r for r in RESERVED_WORDS if r.startswith(word))
+    candidates = sorted(r for r in reserved_set if r.startswith(word))
     if len(candidates) == 1:
         return candidates[0]
     if len(candidates) > 1:
@@ -218,10 +230,12 @@ def match_reserved(word: str) -> str | None:
 def _classify_first(word: str, config: Config) -> tuple[str, str | None]:
     """Classify a free word: ('reserved', name) | ('target', None).
 
-    Order: exact reserved → exact alias → reserved prefix → free target.
-    Exact alias beats reserved prefix (alias ``t`` wins over ``todo``).
+    Order: exact positional reserved → exact alias → reserved prefix → free
+    target. Exact alias beats reserved prefix (alias ``t`` wins over ``todo``;
+    alias ``c`` wins over any residual prefix and never becomes ``config``).
     """
-    if word in RESERVED_WORDS:
+    reserved_set = _positional_reserved()
+    if word in reserved_set:
         return "reserved", word
     if word in config.aliases:
         return "target", None
@@ -255,11 +269,6 @@ def _resolve_reserved(
     verb: str,
     rest: Sequence[str],
 ) -> Command:
-    if verb == "config":
-        if rest:
-            raise UsageError("config takes no arguments (use `od config`)")
-        return ShowConfig()
-
     if verb == "vaults":
         if len(rest) == 0:
             return ListVaults()

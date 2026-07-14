@@ -124,7 +124,9 @@ def _attach_completers(parser: argparse.ArgumentParser) -> None:
             cfg = config.load(parsed_args.vault_override, {})
         except ConfigError:
             cfg = Config(data=dict(config.DEFAULTS))
-        choices = sorted(RESERVED_WORDS) + sorted(cfg.aliases.keys())
+        # ``config`` is flag-only (``--config``); not a positional completer.
+        positional = sorted(w for w in RESERVED_WORDS if w != "config")
+        choices = positional + sorted(cfg.aliases.keys())
         choices.extend(["=", "off", "-"])
         try:
             choices.extend(_list_vault_names(cfg))
@@ -454,15 +456,18 @@ def _dispatch(
     if isinstance(cmd, Append):
         text = cmd.text
         style = cmd.style
+        # Always expand aliases so writes and the destination echo use the
+        # canonical heading (e.g. sticky ``p`` → ``personal updates``).
+        heading = resolve.expand_target(cmd.target, cfg)
         if text is None:
             text = stdin.read()
             if text is None:
                 text = ""
             style = "code"
-        text = _maybe_entity_link(vault_name, cmd.target, text)
+        text = _maybe_entity_link(vault_name, heading, text)
         if cmd.via_sticky:
-            _err(f"→ {vault_name}/{cmd.target}", stderr)
-        vault.append(vault_name, cmd.target, text, style=style)
+            _err(f"→ {vault_name}/{heading}", stderr)
+        vault.append(vault_name, heading, text, style=style)
         return 0
 
     if isinstance(cmd, Todo):
@@ -536,12 +541,11 @@ def run(
     show_config = bool(args.show_config)
     vault_override: str | None = args.vault_override
 
-    # --config flag is equivalent to reserved ShowConfig (no positionals).
+    # --config is flag-only (never a positional reserved word).
     if show_config:
         if words:
             _err("--config does not take additional arguments", stderr)
             return 2
-        words = ["config"]
 
     stdin_piped = not stdin.isatty()
 
@@ -567,12 +571,15 @@ def run(
             _err(str(exc), stderr)
             return 1
 
-        cmd = resolve.resolve(
-            words,
-            cfg,
-            st,
-            stdin_piped=stdin_piped,
-        )
+        if show_config:
+            cmd: Command = ShowConfig()
+        else:
+            cmd = resolve.resolve(
+                words,
+                cfg,
+                st,
+                stdin_piped=stdin_piped,
+            )
 
         needs_fresh_sticky = isinstance(cmd, Append) and cmd.via_sticky
         needs_fresh_sticky = needs_fresh_sticky or isinstance(
@@ -591,6 +598,17 @@ def run(
                 st,
                 stdin_piped=stdin_piped,
             )
+
+        # Piped stdin must be routed to a code-block append; never discard.
+        if stdin_piped and not (
+            isinstance(cmd, Append) and cmd.text is None
+        ):
+            _err(
+                "piped stdin has no destination; "
+                "use: cmd | od <alias|heading>",
+                stderr,
+            )
+            return 1
 
         # Commands that never need a vault filesystem context.
         if isinstance(cmd, (SetVault, ShowSticky, SetSticky, ClearSticky)):
