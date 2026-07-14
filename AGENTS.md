@@ -25,6 +25,19 @@ A human owns this project. Agents are contributors, not owners.
 - Never delete code you don't understand. Never delete tests to make a build pass.
 - If the correct fix genuinely requires touching out-of-scope code, stop and consult.
 
+## Credential Hygiene (hard boundary)
+
+- Agents never run `git config --global` or modify any config outside this
+  repository.
+- Never embed credentials in remote URLs, git config (`url.insteadOf`,
+  `credential.*.token`), scripts, or committed files. Auth goes through the
+  system credential helper (`gh auth setup-git`) only.
+- Never echo, log, or commit tokens/secrets encountered in command output;
+  if one is exposed, stop, report it to the human, and treat it as
+  compromised (rotation required).
+- Any task that appears to require a raw credential is a stop-and-consult:
+  ask the human before proceeding.
+
 ## Modularity Rules (Build to Avoid Merge Conflicts)
 
 The codebase is compartmentalized so parallel contributors — human or a swarm of agents — rarely touch the same file.
